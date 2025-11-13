@@ -1,0 +1,164 @@
+#include <Wire.h>
+#include <Servo.h>
+
+#define MPU_ADDR 0x68  // MPU6050 I2C address
+
+// Servo pins
+#define BASE_PIN 6
+#define SHOULDER_PIN 5
+#define ELBOW_PIN 3
+#define LED_PIN 7
+#define BUTTON_PIN 8
+
+Servo baseServo;
+Servo shoulderServo;
+Servo elbowServo;
+
+// Default positions
+int basePos = 90;
+int shoulderPos = 90;
+int elbowPos = 90;
+
+// Button state
+bool ledState = false;
+
+
+
+
+void setup() {
+  Serial.begin(115200);
+
+
+
+  Wire.begin();
+  delay(100);
+
+
+  // Wake up MPU6050
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x6B);
+  Wire.write(0);
+  Wire.endTransmission(true);
+
+  // Attach servos
+  baseServo.attach(BASE_PIN);
+  shoulderServo.attach(SHOULDER_PIN);
+  elbowServo.attach(ELBOW_PIN);
+
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
+  digitalWrite(LED_PIN, LOW);
+  baseServo.write(basePos);
+  shoulderServo.write(shoulderPos);
+  elbowServo.write(elbowPos);
+
+  Serial.println("MPU6050 + Progressive Shoulder & Elbow Control (Front/Back Tilt) Ready!");
+}
+
+void loop() {
+  int16_t ax, ay, az;
+
+
+
+
+  // Read accelerometer
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x3B);
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU_ADDR, 6, true);
+
+
+
+
+
+  ax = Wire.read() << 8 | Wire.read();
+  ay = Wire.read() << 8 | Wire.read();
+  az = Wire.read() << 8 | Wire.read();
+
+  float AccX = ax / 16384.0;
+  float AccY = ay / 16384.0;
+  float AccZ = az / 16384.0;
+
+  Serial.print("X: "); Serial.print(AccX, 2);
+  Serial.print(" | Y: "); Serial.print(AccY, 2);
+  Serial.print(" | Z: "); Serial.println(AccZ, 2);
+
+  // ------------------------
+  // FRONT/BACK progressive control
+  // ------------------------
+  if (AccX > 0.25 && AccX <= 0.45) {
+    // Slight tilt backward → move shoulder
+    Serial.println("Slight Back → Shoulder moves back");
+    shoulderPos = constrain(shoulderPos - 2, 60, 120);
+  } 
+  else if (AccX > 0.45) {
+    // Strong tilt backward → move shoulder + elbow
+
+
+
+
+
+    Serial.println("Strong Back → Shoulder + Elbow move back");
+    shoulderPos = constrain(shoulderPos - 2, 60, 120);
+    elbowPos = constrain(elbowPos - 2, 60, 120);
+  } 
+  else if (AccX < -0.25 && AccX >= -0.45) {
+    // Slight tilt forward → move shoulder
+    Serial.println("Slight Front → Shoulder moves forward");
+    shoulderPos = constrain(shoulderPos + 2, 60, 120);
+  } 
+
+
+
+
+
+  else if (AccX < -0.45) {
+    // Strong tilt forward → move shoulder + elbow
+    Serial.println("Strong Front → Shoulder + Elbow move forward");
+    shoulderPos = constrain(shoulderPos + 2, 60, 120);
+    elbowPos = constrain(elbowPos + 2, 60, 120);
+  }
+
+  // ------------------------
+  // LEFT / RIGHT control for Base
+  // ------------------------
+  if (AccY > 0.3) {
+    Serial.println("Left");
+    basePos = constrain(basePos + 2, 60, 120);
+  } 
+  else if (AccY < -0.3) {
+    Serial.println("Right");
+    basePos = constrain(basePos - 2, 60, 120);
+  }
+
+
+
+
+
+
+
+
+  // ------------------------
+  // LED Button Toggle
+  // ------------------------
+  if (digitalRead(BUTTON_PIN) == LOW) {
+    delay(200); // debounce
+    ledState = !ledState;
+    digitalWrite(LED_PIN, ledState ? HIGH : LOW);
+  }
+
+
+  // ------------------------
+  // Apply servo positions
+  // ------------------------
+  baseServo.write(basePos);
+  shoulderServo.write(shoulderPos);
+  elbowServo.write(elbowPos);
+
+  delay(200);
+}
+
+
+
+
